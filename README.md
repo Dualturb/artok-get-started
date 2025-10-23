@@ -68,3 +68,4 @@ This repository is designed to be a starting line. Once you confirm the base int
 - [Advanced Examples Repository](https://github.com/Dualturb):For complex features like sensor integration, data charting, network communication, and multiple hardware targets.
 
 We are committed to making your HMI development seamless and fast! If you encounter any issues, please submit an issue here on GitHub.
+
