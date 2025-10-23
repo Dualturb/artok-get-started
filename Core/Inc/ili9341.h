@@ -54,6 +54,7 @@ void ILI9341_FillRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint1
 void ILI9341_FillScreen(uint16_t color);
 void ILI9341_DrawPixel(uint16_t x, uint16_t y, uint16_t color);
 void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* data);
+void ILI9341_DrawImage_DMA(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* data);
 void ILI9341_SetRotation(uint8_t rotation);
 void ILI9341_InvertColors(bool invert);
 

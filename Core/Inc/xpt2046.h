@@ -6,27 +6,26 @@
 #endif
 
 #include "main.h"
+#include <stdint.h>
 #include <stdbool.h>
 
- // XPT2046 Touch Controller Constants
- #define TP_PRES_DOWN 0x80
- #define TP_CATH_PRES 0x40
- #define CMD_RDX 0xD0
- #define CMD_RDY 0x90
+ // The following values are used for touch panel validation.
+ // They represent a wide, generic range that should not be changed for different screens.
+ #define XPT_XMIN 		200
+ #define XPT_XMAX 		3900
+ #define XPT_YMIN 		200
+ #define XPT_YMAX 		3900
 
- // Raw touch coordinate boundaries and pressure threshold.
- // These are specific to your hardware and may require calibration.
- #define XPT_XMIN 350
- #define XPT_YMIN 350
- #define XPT_XMAX 3800
- #define XPT_YMAX 3600
- #define XPT_WIDTH (XPT_XMAX - XPT_XMIN)
- #define XPT_HEIGHT (XPT_YMAX - XPT_YMIN)
- #define Z_THRESHOLD 400
+#define XPT_WIDTH 		(XPT_XMAX - XPT_XMIN)
+#define XPT_HEIGHT 		(XPT_YMAX - XPT_YMIN)
 
- void XPT2046_Init(void);
- bool XPT2046_Read(uint16_t *x, uint16_t *y);
- uint8_t XPT2046_IsReasonable(uint16_t x, uint16_t y);
+// Threshold for touch pressure (Z-axis)
+#define Z_THRESHOLD 	400
+
+// Public function prototypes
+void XPT2046_Init(void);
+uint16_t XPT2046_ReadZ(void);
+bool XPT2046_ReadXY(uint16_t *x, uint16_t *y);
 #ifdef __cplusplus
 }
 #endif

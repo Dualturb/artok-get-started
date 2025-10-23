@@ -40,6 +40,15 @@
 #define ART_LCD_HEIGHT 320
 
 /**
+ * @brief Generic data structure for touch input.
+ */
+typedef struct {
+    int16_t x;
+    int16_t y;
+    bool pressed;
+} HMI_Touch_Data_t;
+
+/**
  * @brief Represents the hardware abstraction layer (HAL) interface.
  *
  * This struct provides function pointers and data addresses that the HMI runtime
@@ -47,7 +56,7 @@
  */
 typedef struct {
     /** A function pointer for reading data from non-volatile memory (e.g., flash). */
-    void (*read_flash)(uint8_t* p_buffer, uint32_t address, uint32_t size);
+    uint32_t (*read_flash)(uint8_t* p_buffer, uint32_t address, uint32_t size);
 
     /** The display flush callback provided by the customer.
      * It's responsible for sending rendered pixels to the physical display. */
@@ -61,7 +70,7 @@ typedef struct {
 
     /** The size of the display buffer in bytes. */
     uint32_t disp_buffer_size_bytes;
-
+    
     /** The input read callback provided by the customer.
      * It's responsible for reporting touch input data (x, y, and button state). */
     void (*read_input_cb)(void *p_indev_drv, void *p_data);

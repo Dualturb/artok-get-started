@@ -3,7 +3,6 @@
  *
  * Created on: 20240508
  * Author: Halton Xu
- * Modified: Gemini
  */
 
 #include "stm32f1xx_hal.h"
@@ -47,6 +46,19 @@ static void ILI9341_WriteData(uint8_t* buff, size_t buff_size) {
         buff += chunk_size;
         buff_size -= chunk_size;
     }
+}
+
+/**
+ * @brief Writes pixel data to the display using a non-blocking DMA transfer.
+ * This is a low-level function that performs the actual DMA transfer.
+ * @param buff A pointer to the data buffer.
+ * @param buff_size The size of the buffer in bytes.
+ */
+void ILI9341_WriteData_DMA(uint8_t* buff, size_t buff_size) {
+    // Set DC to data mode before starting the DMA transfer
+    HAL_GPIO_WritePin(ILI9341_DC_GPIO_Port, ILI9341_DC_Pin, GPIO_PIN_SET);
+    HAL_SPI_Transmit_DMA(&hspi2, buff, buff_size);
+    // Note: The SPI unselect will be handled in the DMA complete callback.
 }
 
 static void ILI9341_SetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
@@ -291,6 +303,26 @@ void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uin
     ILI9341_WriteData((uint8_t*)data, w * h * 2); // Each pixel is 2 bytes (16-bit color)
 
     ILI9341_Unselect();
+}
+
+
+/**
+ * @brief Draws a full-color image on the display using a non-blocking DMA transfer.
+ * @param x The starting x-coordinate.
+ * @param y The starting y-coordinate.
+ * @param w The width of the image.
+ * @param h The height of the image.
+ * @param data A pointer to the image data buffer.
+ */
+void ILI9341_DrawImage_DMA(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* data) {
+    if((x >= ILI9341_WIDTH) || (y >= ILI9341_HEIGHT)) return;
+    if((x + w - 1) >= ILI9341_WIDTH) w = ILI9341_WIDTH - x;
+    if((y + h - 1) >= ILI9341_HEIGHT) h = ILI9341_HEIGHT - y;
+
+    ILI9341_Select();
+    ILI9341_SetAddressWindow(x, y, x + w - 1, y + h - 1);
+
+    ILI9341_WriteData_DMA((uint8_t*)data, w * h * 2); // Each pixel is 2 bytes (16-bit color)
 }
 
 /**

@@ -165,9 +165,10 @@ uint32_t W25Q_ReadID(void) {
  * @param pData Pointer to the buffer to store the read data.
  * @param ReadAddr Start address to read from (24-bit).
  * @param Size Number of bytes to read.
- * @retval None
+ * @retval The actual number of bytes read (Size on success, 0 on failure).
  */
-void W25Q_Read(uint8_t* pData, uint32_t ReadAddr, uint32_t Size) {
+uint32_t W25Q_Read(uint8_t* pData, uint32_t ReadAddr, uint32_t Size) {
+	uint32_t bytes_read = 0;
     W25Q_WaitForWriteEnd(); // Ensure flash is not busy
 
     W25Q_CS_LOW(); // Select flash chip
@@ -179,12 +180,16 @@ void W25Q_Read(uint8_t* pData, uint32_t ReadAddr, uint32_t Size) {
     SPI_SendByte(ReadAddr & 0xFF);
 
     // Read data bytes
-    if (HAL_SPI_Receive(&hspi1, pData, Size, HAL_MAX_DELAY) != HAL_OK) {
-        // Handle SPI error
-        // Error_Handler();
+    if (HAL_SPI_Receive(&hspi1, pData, Size, HAL_MAX_DELAY) == HAL_OK) {
+        bytes_read = Size; // Success: return the requested size
+    } else {
+        // SPI read failed, return 0 bytes read
+        // You may want to log an error here
+        bytes_read = 0;
     }
 
     W25Q_CS_HIGH(); // Deselect flash chip
+    return bytes_read;
 }
 
 /**

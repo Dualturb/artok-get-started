@@ -1,175 +1,138 @@
 /**
  * @file xpt2046.c
- * @brief Low-level driver for the XPT2046 touch controller.
+ * @brief Source file for the XPT2046 touch controller driver.
  *
- * This file provides the implementation for initializing the XPT2046 chip
- * and reading touch coordinates via the SPI bus.
+ * This file contains the implementation of functions for communicating with the
+ * XPT2046 touch controller. It uses a pressure-based polling method rather than
+ * relying on the IRQ pin.
  */
 
 #include "xpt2046.h"
-#include "main.h"
-#include <stdbool.h>
+#include "main.h" // For SPI and HAL functions
 
-/**********************
- * EXTERN VARIABLES
- **********************/
-// External declaration for the SPI handle used to communicate with the XPT2046.
-// Assumes the touch controller is on SPI3.
+// Extern declaration for the SPI handle
 extern SPI_HandleTypeDef hspi3;
 
+// Commands for the XPT2046
+#define CMD_X_MEASURE 0x90
+#define CMD_Y_MEASURE 0xD0
+#define CMD_Z1_MEASURE 0xB1
+#define CMD_Z2_MEASURE 0xC1
 
-/**********************
- * STATIC PROTOTYPES
- **********************/
-// Functions to control the Chip Select (CS) pin
-static void XPT2046_CS_Select(void);
-static void XPT2046_CS_Deselect(void);
-
-// Function to read a single axis from the touch controller
-static uint16_t XPT2046_Read_Axis(uint8_t command);
-
-// Helper function to average the best two of three readings
+// Private function prototypes
+static void XPT2046_WriteByte(uint8_t data);
+static uint16_t XPT2046_ReadAD(uint8_t command);
 static int16_t besttwoavg(int16_t x, int16_t y, int16_t z);
 
-
-/**********************
- * GLOBAL FUNCTIONS
- **********************/
-
 /**
- * @brief Initializes the XPT2046 touch controller.
+ * @brief Initializes the XPT2046 driver.
+ *
+ * This function is used to signal that the driver is ready.
  */
-void XPT2046_Init(void) {
-    // No specific software initialization is required for the XPT2046 itself.
-    // The hardware is already configured via the GPIO_Init() and SPI_Init()
-    // calls. We just ensure the Chip Select pin is in its default (inactive) state.
-    XPT2046_CS_Deselect();
-    HAL_Delay(10);
+void XPT2046_Init(void)
+{
+    // A dummy read to wake up the controller
+    XPT2046_ReadAD(CMD_X_MEASURE);
 }
 
 /**
- * @brief Reads the touch coordinates from the XPT2046.
- *
- * This function should only be called when a touch event is detected
- * (i.e., when the PENIRQ line goes low). It performs the SPI transactions
- * to get the x and y coordinates.
- *
- * @param x A pointer to a variable to store the raw X coordinate.
- * @param y A pointer to a variable to store the raw Y coordinate.
- * @return Returns true if a valid touch is read, false otherwise.
+ * @brief Reads the raw pressure value (Z-axis) from the XPT2046.
+ * @return The raw Z-axis value.
  */
-bool XPT2046_Read(uint16_t *x, uint16_t *y) {
-    // The check for a touch event is now handled by the artok_read_input_cb
-    // function. We assume a touch is present here.
+uint16_t XPT2046_ReadZ(void)
+{
+    // Z-axis measurement is more reliable for press detection
+    uint16_t z1 = XPT2046_ReadAD(CMD_Z1_MEASURE);
+    uint16_t z2 = XPT2046_ReadAD(CMD_Z2_MEASURE);
+    uint16_t z_val = (z1 + 4095) - z2;
+    return z_val;
+}
 
-    // Select the XPT2046 chip and hold CS low for the entire transaction.
-    XPT2046_CS_Select();
-    HAL_Delay(1);
+/**
+ * @brief Reads the X and Y coordinates from the XPT2046.
+ * @param x Pointer to store the raw X coordinate.
+ * @param y Pointer to store the raw Y coordinate.
+ * @return true if a valid read occurred, false otherwise.
+ */
+bool XPT2046_ReadXY(uint16_t *x, uint16_t *y)
+{
+    uint16_t tx_samples[3];
+    uint16_t ty_samples[3];
 
-    // Perform a Z-axis pressure check before reading coordinates.
-    // If pressure is too low, it's a false touch.
-    int16_t z1 = XPT2046_Read_Axis(0xb1);
-    int16_t z2 = XPT2046_Read_Axis(0xc1);
+    // Read multiple times to filter out noise
+    tx_samples[0] = XPT2046_ReadAD(CMD_X_MEASURE);
+    ty_samples[0] = XPT2046_ReadAD(CMD_Y_MEASURE);
+    tx_samples[1] = XPT2046_ReadAD(CMD_X_MEASURE);
+    ty_samples[1] = XPT2046_ReadAD(CMD_Y_MEASURE);
+    tx_samples[2] = XPT2046_ReadAD(CMD_X_MEASURE);
+    ty_samples[2] = XPT2046_ReadAD(CMD_Y_MEASURE);
 
-    int32_t z = z1 + 4095 - z2;
-    if (z < Z_THRESHOLD) {
-        XPT2046_CS_Deselect(); // Release CS on failure
-        return false;
+    // Get the averaged values
+    *x = besttwoavg(tx_samples[0], tx_samples[1], tx_samples[2]);
+    *y = besttwoavg(ty_samples[0], ty_samples[1], ty_samples[2]);
+
+    // Simple validation based on a wide range.
+    // Specific calibration is done in hmi_drivers.c
+    if (*x >= XPT_XMIN && *x <= XPT_XMAX && *y >= XPT_YMIN && *y <= XPT_YMAX) {
+        return true;
     }
 
-    // Read X and Y coordinates multiple times to average the values.
-    int16_t data[6];
-    XPT2046_Read_Axis(0x91);  // Dummy read to settle ADC
-    data[0] = XPT2046_Read_Axis(0x91);
-    data[1] = XPT2046_Read_Axis(0xd1);
-    data[2] = XPT2046_Read_Axis(0x91);
-    data[3] = XPT2046_Read_Axis(0xd1);
-    data[4] = XPT2046_Read_Axis(0x91);
-    data[5] = XPT2046_Read_Axis(0xd1);
-
-    // Deselect the chip.
-    XPT2046_CS_Deselect();
-
-    // Average the coordinates using the best two out of three readings.
-    int16_t intx = besttwoavg(data[0], data[2], data[4]);
-    int16_t inty = besttwoavg(data[1], data[3], data[5]);
-
-    // Check if the coordinates are within a reasonable range before returning.
-    if (!XPT2046_IsReasonable(intx, inty)) {
-        return false;
-    }
-
-    *x = intx;
-    *y = inty;
-
-    return true;
+    return false;
 }
 
-
-/**********************
- * STATIC FUNCTIONS
- **********************/
-
 /**
- * @brief Selects the XPT2046 Chip Select pin (active low).
+ * @brief Writes a single byte to the XPT2046 via SPI.
+ * @param data The byte to send.
  */
-static void XPT2046_CS_Select(void) {
-    HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_RESET);
+static void XPT2046_WriteByte(uint8_t data)
+{
+    HAL_SPI_Transmit(&hspi3, &data, 1, HAL_MAX_DELAY);
 }
 
 /**
- * @brief Deselects the XPT2046 Chip Select pin.
- */
-static void XPT2046_CS_Deselect(void) {
-    HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_SET);
-}
-
-/**
- * @brief Reads a single axis value from the XPT2046.
- *
- * @param command The command byte for the desired axis (CMD_RDX or CMD_RDY).
+ * @brief Reads a 12-bit ADC value from the XPT2046.
+ * @param command The command byte for the desired measurement.
  * @return The 12-bit ADC value.
  */
-static uint16_t XPT2046_Read_Axis(uint8_t command) {
-    uint8_t tx_buf[1] = {command};
-    uint8_t rx_buf[2];
-
-    // Transmit the command byte
-    HAL_SPI_Transmit(&hspi3, tx_buf, 1, HAL_MAX_DELAY);
-
-    // Receive the two data bytes while sending dummy bytes to clock them in.
-    uint8_t dummy_tx[] = {0x00, 0x00};
-    HAL_SPI_TransmitReceive(&hspi3, dummy_tx, rx_buf, 2, HAL_MAX_DELAY);
-
-    // The first received byte is garbage. The next two bytes contain the 12-bit data.
-    uint16_t data = (rx_buf[0] << 8) | rx_buf[1];
-    return data >> 3;
-}
-
-/**
- * @brief Helper function to average the best two of three values.
- */
-static int16_t besttwoavg(int16_t x, int16_t y, int16_t z) {
-    int16_t da, db, dc;
-    if (x > y) da = x - y; else da = y - x;
-    if (x > z) db = x - z; else db = z - x;
-    if (z > y) dc = z - y; else dc = y - z;
-
-    if (da <= db && da <= dc) return (x + y) >> 1;
-    if (db <= da && db <= dc) return (x + z) >> 1;
-    return (y + z) >> 1;
-}
-
-/**
- * @brief Checks if the raw coordinates are within a reasonable range.
- * @param x The raw x-coordinate.
- * @param y The raw y-coordinate.
- * @return 1 if reasonable, 0 otherwise.
- */
-uint8_t XPT2046_IsReasonable(uint16_t x, uint16_t y)
+static uint16_t XPT2046_ReadAD(uint8_t command)
 {
-    if (x >= XPT_XMIN && x <= XPT_XMAX && y >= XPT_YMIN && y <= XPT_YMAX) {
-        return 1;
+    uint8_t tx_buf[1];
+    uint8_t rx_buf[2];
+    uint16_t result;
+
+    tx_buf[0] = command;
+
+    HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_RESET);
+    HAL_SPI_Transmit(&hspi3, tx_buf, 1, 100);
+    HAL_SPI_Receive(&hspi3, rx_buf, 2, 100);
+    HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_SET);
+
+    result = (rx_buf[0] << 8) | rx_buf[1];
+    result >>= 3; // The XPT2046 returns a 16-bit value, but only 12 bits are valid.
+    return result;
+}
+
+/**
+ * @brief Averages the two closest values from three measurements to reduce noise.
+ */
+static int16_t besttwoavg(int16_t x, int16_t y, int16_t z)
+{
+    int16_t da, db, dc;
+    int16_t reta;
+
+    if (x > y) da = x - y;
+    else da = y - x;
+    if (x > z) db = x - z;
+    else db = z - x;
+    if (z > y) dc = z - y;
+    else dc = y - z;
+
+    if (da <= db && da <= dc) {
+        reta = (x + y) >> 1;
+    } else if (db <= da && db <= dc) {
+        reta = (x + z) >> 1;
+    } else {
+        reta = (y + z) >> 1;
     }
-    return 0;
+    return (reta);
 }

@@ -100,9 +100,9 @@ uint32_t W25Q_ReadID(void);
  * @param pData Pointer to the buffer to store the read data.
  * @param ReadAddr Start address to read from.
  * @param Size Number of bytes to read.
- * @retval None
+ * @retval The actual number of bytes read (Size on success, 0 on failure).
  */
-void W25Q_Read(uint8_t* pData, uint32_t ReadAddr, uint32_t Size);
+uint32_t W25Q_Read(uint8_t* pData, uint32_t ReadAddr, uint32_t Size);
 
 /**
  * @brief Writes data to a page of the W25QXX flash chip.

@@ -61,18 +61,16 @@ void Error_Handler(void);
 #define F_CS_GPIO_Port GPIOA
 #define TP_IRQ_Pin GPIO_PIN_1
 #define TP_IRQ_GPIO_Port GPIOB
-#define TP_IRQ_EXTI_IRQn EXTI1_IRQn
 #define LCD_DC_Pin GPIO_PIN_10
 #define LCD_DC_GPIO_Port GPIOB
 #define LCD_RST_L_Pin GPIO_PIN_11
 #define LCD_RST_L_GPIO_Port GPIOB
 #define LCD_CS_Pin GPIO_PIN_12
 #define LCD_CS_GPIO_Port GPIOB
-#define TP_CS_Pin GPIO_PIN_6
+#define TP_CS_Pin GPIO_PIN_8
 #define TP_CS_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

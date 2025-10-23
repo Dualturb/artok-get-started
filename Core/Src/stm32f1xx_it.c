@@ -23,6 +23,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "artok_runtime.h"
+#include "artok_flasher.h"
+#include "flasher.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -42,7 +44,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-extern volatile bool touch_event_flag;
 extern uint8_t uart_rx_byte_isr;
 /* USER CODE END PV */
 
@@ -57,6 +58,7 @@ extern uint8_t uart_rx_byte_isr;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern DMA_HandleTypeDef hdma_spi2_tx;
 extern SPI_HandleTypeDef hspi1;
 extern SPI_HandleTypeDef hspi2;
 extern SPI_HandleTypeDef hspi3;
@@ -188,7 +190,7 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-	  ART_IncTick(1);
+	ART_IncTick(1);
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
@@ -204,17 +206,17 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
-  * @brief This function handles EXTI line1 interrupt.
+  * @brief This function handles DMA1 channel5 global interrupt.
   */
-void EXTI1_IRQHandler(void)
+void DMA1_Channel5_IRQHandler(void)
 {
-  /* USER CODE BEGIN EXTI1_IRQn 0 */
+  /* USER CODE BEGIN DMA1_Channel5_IRQn 0 */
 
-  /* USER CODE END EXTI1_IRQn 0 */
-  HAL_GPIO_EXTI_IRQHandler(TP_IRQ_Pin);
-  /* USER CODE BEGIN EXTI1_IRQn 1 */
+  /* USER CODE END DMA1_Channel5_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_spi2_tx);
+  /* USER CODE BEGIN DMA1_Channel5_IRQn 1 */
 
-  /* USER CODE END EXTI1_IRQn 1 */
+  /* USER CODE END DMA1_Channel5_IRQn 1 */
 }
 
 /**
@@ -283,7 +285,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
   if (GPIO_Pin == TP_IRQ_Pin) {
     // Set the flag to notify the main loop that a touch event has occurred.
     // The main loop will handle the touch read in the non-interrupt context.
-    touch_event_flag = true;
   }
 }
 
@@ -294,9 +295,24 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
  */
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) {
   if (hspi->Instance == SPI2) {
-    // Signal to the Artok-Runtime that the display flush is complete.
-    // This allows LVGL to start rendering the next frame.
-    ART_FlushComplete();
+	  // Unselect the LCD chip.
+	      ILI9341_Unselect();
+	      // Signal to the Artok-Runtime that the display flush is complete.
+	      // This allows LVGL to start rendering the next frame.
+	      ART_FlushComplete();
   }
+}
+
+/**
+ * @brief  Rx Transfer completed callback.
+ * @param  huart UART handle.
+ * @retval None
+ */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    // Check if the callback is from the UART instance used for flashing
+    if (huart->Instance == USART1) {
+        // Forward the event to the dedicated flasher module
+        Flasher_UartRxCpltCallback();
+    }
 }
 /* USER CODE END 1 */
